@@ -1,234 +1,263 @@
 #!/usr/bin/env python3
 """
-演示CTA策略的实际运行
+演示脚本：使用模拟数据运行1小时级别CTA回测
+避免API连接问题，适合快速测试
 """
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from src.cta_strategy import CryptoCTAStrategy
-from src.data_fetcher import CryptoDataFetcher
 import pandas as pd
 import numpy as np
+from datetime import datetime, timedelta
+import os
+import sys
 
-def create_more_volatile_data():
-    """创建更具波动性的数据以产生更多交易信号"""
-    fetcher = CryptoDataFetcher()
+# 添加项目路径
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+def generate_sample_data(symbol='BTCUSDT', days=30, interval='1h'):
+    """生成模拟数据"""
+    print(f"生成 {symbol} 的模拟数据 ({days}天, {interval})...")
     
-    # 生成基础数据
-    df = fetcher.generate_sample_data(days=365, start_price=50000)
+    # 计算数据点数量
+    if interval == '1h':
+        freq = '1h'
+        periods = days * 24
+    elif interval == '4h':
+        freq = '4h'
+        periods = days * 6
+    else:
+        freq = '1h'
+        periods = days * 24
     
-    # 添加更多波动性
+    # 生成时间序列
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=days)
+    dates = pd.date_range(start=start_date, end=end_date, freq=freq)[:periods]
+    
+    # 基础价格
+    if 'BTC' in symbol:
+        start_price = 50000
+    elif 'ETH' in symbol:
+        start_price = 3000
+    else:
+        start_price = 100
+    
     np.random.seed(42)
     
-    # 添加周期性波动
-    for i in range(len(df)):
-        # 每30天添加一个较大的波动
-        if i % 30 == 15:
-            df.iloc[i, df.columns.get_loc('close')] *= (1 + np.random.uniform(-0.15, 0.15))
-        
-        # 每10天添加一个中等波动
-        elif i % 10 == 5:
-            df.iloc[i, df.columns.get_loc('close')] *= (1 + np.random.uniform(-0.08, 0.08))
+    # 随机游走（带趋势）
+    returns = np.random.normal(0.0005, 0.01, len(dates))  # 0.05%平均收益，1%波动
+    trend = np.linspace(0, 0.1, len(dates))  # 10%的趋势
+    returns += trend / len(dates)
     
-    # 重新计算high/low
-    for i in range(len(df)):
-        current_price = df.iloc[i]['close']
-        df.iloc[i, df.columns.get_loc('high')] = max(df.iloc[i]['open'], current_price) * 1.02
-        df.iloc[i, df.columns.get_loc('low')] = min(df.iloc[i]['open'], current_price) * 0.98
+    price = start_price * np.exp(np.cumsum(returns))
     
+    # 生成OHLCV数据
+    df = pd.DataFrame(index=dates)
+    df['close'] = price
+    open_prices = df['close'].shift(1) * (1 + np.random.normal(0, 0.005, len(dates)))
+    open_prices.iloc[0] = start_price
+    df['open'] = open_prices
+    
+    # 高低价
+    price_range = df['close'] * 0.02  # 2%的价格范围
+    df['high'] = df[['open', 'close']].max(axis=1) + np.random.uniform(0, 0.5, len(dates)) * price_range
+    df['low'] = df[['open', 'close']].min(axis=1) - np.random.uniform(0, 0.5, len(dates)) * price_range
+    
+    # 确保 high >= low
+    high_low_df = df[['high', 'low']]
+    df['high'] = high_low_df.max(axis=1)
+    df['low'] = high_low_df.min(axis=1)
+    
+    # 成交量
+    df['volume'] = 1000 * (1 + np.abs(returns) * 10) * np.random.uniform(0.8, 1.2, len(dates))
+    
+    # 删除NaN
+    df = df.dropna()
+    
+    print(f"生成 {len(df)} 条数据，价格范围: ${df['close'].min():.2f} - ${df['close'].max():.2f}")
     return df
 
-def demo_strategy_with_aggressive_params():
-    """使用更积极的参数演示策略"""
-    print("=" * 70)
-    print("CTA策略演示 - 积极参数")
-    print("=" * 70)
+def run_demo_backtest(symbol='BTCUSDT', days=30, capital=10000):
+    """运行演示回测"""
+    print(f"\n{'='*60}")
+    print(f"1小时级别CTA策略演示回测")
+    print(f"交易对: {symbol}")
+    print(f"回测天数: {days}天")
+    print(f"初始资金: ${capital:,.2f}")
+    print(f"{'='*60}\n")
     
-    # 创建更具波动性的数据
-    print("\n1. 创建模拟数据...")
-    df = create_more_volatile_data()
-    print(f"数据条数: {len(df)}")
-    print(f"价格范围: ${df['close'].min():.0f} - ${df['close'].max():.0f}")
-    print(f"价格波动: {(df['close'].max() / df['close'].min() - 1):.1%}")
+    # 1. 生成数据
+    df = generate_sample_data(symbol, days, '1h')
     
-    # 使用更积极的策略参数
-    print("\n2. 创建策略（积极参数）...")
+    # 2. 导入策略
+    from src.cta_strategy import CryptoCTAStrategy
+    
+    # 使用针对1小时优化的参数
     strategy = CryptoCTAStrategy(
-        fast_period=10,       # 更短的快速均线
-        slow_period=30,       # 更短的慢速均线
-        rsi_period=10,        # 更短的RSI周期
+        fast_period=12,      # 12小时均线
+        slow_period=48,      # 48小时均线
+        rsi_period=14,
         bb_period=20,
-        bb_std=1.5,           # 更窄的布林带
-        atr_period=10,
-        volume_threshold=1.1, # 更低的成交量阈值
-        position_size=0.15,   # 更大的仓位
-        stop_loss_pct=0.015,  # 更紧的止损
-        take_profit_pct=0.03  # 更紧的止盈
+        bb_std=2.0,
+        atr_period=14,
+        volume_threshold=1.2,
+        position_size=0.1,   # 10%仓位
+        stop_loss_pct=0.015, # 1.5%止损
+        take_profit_pct=0.03 # 3%止盈
     )
     
-    # 生成信号
-    print("\n3. 生成交易信号...")
+    # 3. 生成信号
+    print("\n生成交易信号...")
     df_with_signals = strategy.generate_signals(df)
     
-    # 统计信号
-    total_signals = (df_with_signals['signal'] != 0).sum()
-    buy_signals = (df_with_signals['signal'] == 1).sum()
-    sell_signals = (df_with_signals['signal'] == -1).sum()
+    # 检查信号
+    buy_signals = df_with_signals[df_with_signals['signal_filtered'] == 1]
+    sell_signals = df_with_signals[df_with_signals['signal_filtered'] == -1]
     
-    print(f"总信号数: {total_signals}")
-    print(f"买入信号: {buy_signals}")
-    print(f"卖出信号: {sell_signals}")
+    print(f"  买入信号: {len(buy_signals)} 个")
+    print(f"  卖出信号: {len(sell_signals)} 个")
     
-    if total_signals == 0:
-        print("警告: 没有生成交易信号，调整策略参数...")
-        # 显示一些指标值
-        print("\n指标统计:")
-        print(f"RSI范围: {df_with_signals['RSI'].min():.1f} - {df_with_signals['RSI'].max():.1f}")
-        print(f"价格位置: {df_with_signals['price_position'].min():.3f} - {df_with_signals['price_position'].max():.3f}")
-        print(f"成交量比率: {df_with_signals['volume_ratio'].min():.2f} - {df_with_signals['volume_ratio'].max():.2f}")
+    # 4. 运行回测
+    print("\n运行回测...")
+    results = strategy.run_backtest(df_with_signals, initial_capital=capital)
     
-    # 运行回测
-    print("\n4. 运行回测...")
-    results = strategy.run_backtest(df, initial_capital=100000)
+    if not results:
+        print("回测失败！")
+        return
     
-    print(f"\n回测结果:")
-    print(f"初始资金: ${results['initial_capital']:,.2f}")
-    print(f"最终资金: ${results['final_capital']:,.2f}")
-    print(f"总收益率: {results['total_return']:.2%}")
-    print(f"总交易次数: {results['total_trades']}")
+    # 5. 显示结果
+    print(f"\n{'='*60}")
+    print(f"回测结果")
+    print(f"{'='*60}")
     
-    # 计算详细指标
-    if results['total_trades'] > 0:
-        metrics = strategy.calculate_metrics(results)
+    # 基本结果
+    final_equity = results.get('final_equity', capital)
+    total_return = (final_equity - capital) / capital
+    trades = results.get('trades', [])
+    
+    print(f"\n📈 基本指标:")
+    print(f"  初始资金: ${capital:,.2f}")
+    print(f"  最终权益: ${final_equity:,.2f}")
+    print(f"  总收益率: {total_return*100:.2f}%")
+    print(f"  总交易次数: {len(trades)}")
+    
+    # 交易分析
+    if trades is not None and not trades.empty:
+        winning_trades = trades[trades['pnl'] > 0]
+        losing_trades = trades[trades['pnl'] <= 0]
         
-        print(f"\n详细指标:")
-        print(f"年化收益率: {metrics.get('年化收益率', 0):.2%}")
-        print(f"夏普比率: {metrics.get('夏普比率', 0):.2f}")
-        print(f"最大回撤: {metrics.get('最大回撤', 0):.2%}")
-        print(f"胜率: {metrics.get('胜率', 0):.2%}")
-        print(f"平均盈利: {metrics.get('平均盈利', 0):.2%}")
-        print(f"平均亏损: {metrics.get('平均亏损', 0):.2%}")
-        print(f"盈亏比: {metrics.get('盈亏比', 0):.2f}")
+        print(f"\n💰 交易分析:")
+        print(f"  盈利交易: {len(winning_trades)}")
+        print(f"  亏损交易: {len(losing_trades)}")
+        print(f"  胜率: {len(winning_trades)/len(trades)*100:.1f}%" if len(trades) > 0 else "  胜率: 0.0%")
         
-        # 显示交易记录
-        trades = results['trades']
-        if not trades.empty:
-            print(f"\n最近5笔交易:")
-            recent_trades = trades.tail(5)
-            for _, trade in recent_trades.iterrows():
-                print(f"  {trade['side'].upper():4s} | 入场: {trade['entry_price']:.0f} | "
-                      f"出场: {trade['exit_price']:.0f} | PnL: {trade['pnl']:.2f} ({trade['pnl_pct']:.2%}) | "
-                      f"原因: {trade['exit_reason']}")
-    
-    return results
-
-def demo_multiple_strategies():
-    """演示多个策略版本"""
-    print("\n" + "=" * 70)
-    print("多策略比较演示")
-    print("=" * 70)
-    
-    # 创建数据
-    fetcher = CryptoDataFetcher()
-    df = create_more_volatile_data()
-    
-    # 定义不同策略
-    strategies = [
-        {
-            'name': '保守趋势跟踪',
-            'params': {
-                'fast_period': 20,
-                'slow_period': 50,
-                'rsi_period': 14,
-                'position_size': 0.1,
-                'stop_loss_pct': 0.02,
-                'take_profit_pct': 0.04
-            }
-        },
-        {
-            'name': '积极均值回归',
-            'params': {
-                'fast_period': 10,
-                'slow_period': 30,
-                'rsi_period': 10,
-                'bb_std': 1.5,
-                'position_size': 0.15,
-                'stop_loss_pct': 0.015,
-                'take_profit_pct': 0.03
-            }
-        },
-        {
-            'name': '平衡混合策略',
-            'params': {
-                'fast_period': 15,
-                'slow_period': 40,
-                'rsi_period': 12,
-                'bb_std': 1.8,
-                'position_size': 0.12,
-                'stop_loss_pct': 0.018,
-                'take_profit_pct': 0.035
-            }
-        }
-    ]
-    
-    results = []
-    
-    for strategy_info in strategies:
-        print(f"\n测试策略: {strategy_info['name']}")
-        print("-" * 40)
+        if len(winning_trades) > 0:
+            print(f"  平均盈利: ${winning_trades['pnl'].mean():.2f}")
+        if len(losing_trades) > 0:
+            print(f"  平均亏损: ${losing_trades['pnl'].mean():.2f}")
         
-        # 创建策略
-        strategy = CryptoCTAStrategy(**strategy_info['params'])
-        
-        # 运行回测
-        backtest_results = strategy.run_backtest(df, initial_capital=100000)
-        metrics = strategy.calculate_metrics(backtest_results)
-        
-        if metrics:
-            results.append({
-                '策略名称': strategy_info['name'],
-                '总收益率': f"{metrics.get('总收益率', 0):.2%}",
-                '年化收益率': f"{metrics.get('年化收益率', 0):.2%}",
-                '夏普比率': f"{metrics.get('夏普比率', 0):.2f}",
-                '最大回撤': f"{metrics.get('最大回撤', 0):.2%}",
-                '胜率': f"{metrics.get('胜率', 0):.2%}",
-                '交易次数': metrics.get('总交易次数', 0)
-            })
+        # 显示前5笔交易
+        print(f"\n📝 最近5笔交易:")
+        recent_trades = trades.tail(5)
+        for i, (idx, trade) in enumerate(recent_trades.iterrows(), 1):
+            direction = "买入" if trade['side'] == 'long' else "卖出"
+            pnl_pct = trade['pnl_pct'] * 100
             
-            print(f"总收益率: {metrics.get('总收益率', 0):.2%}")
-            print(f"夏普比率: {metrics.get('夏普比率', 0):.2f}")
-            print(f"最大回撤: {metrics.get('最大回撤', 0):.2%}")
-            print(f"交易次数: {metrics.get('总交易次数', 0)}")
+            print(f"  {i}. {direction} @ ${trade['entry_price']:.2f} -> "
+                  f"${trade['exit_price']:.2f} ({pnl_pct:+.2f}%)")
     
-    # 显示比较表格
-    if results:
-        print("\n" + "=" * 70)
-        print("策略比较结果")
-        print("=" * 70)
+    # 6. 保存结果
+    print(f"\n💾 保存结果...")
+    results_dir = 'demo_results'
+    os.makedirs(results_dir, exist_ok=True)
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # 保存交易记录
+    if trades is not None and not trades.empty:
+        trades_file = os.path.join(results_dir, f"{symbol}_{timestamp}_trades.csv")
+        trades.to_csv(trades_file, index=False)
+        print(f"  交易记录: {trades_file}")
+    
+    # 保存数据
+    data_file = os.path.join(results_dir, f"{symbol}_{timestamp}_data.csv")
+    df_with_signals.to_csv(data_file)
+    print(f"  数据文件: {data_file}")
+    
+    # 7. 生成简单图表
+    try:
+        import matplotlib.pyplot as plt
         
-        results_df = pd.DataFrame(results)
-        print(results_df.to_string(index=False))
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+        
+        # 价格和信号
+        ax1.plot(df.index, df['close'], label='Close Price', linewidth=1, color='blue')
+        
+        # 标记买入信号
+        if len(buy_signals) > 0:
+            ax1.scatter(buy_signals.index, buy_signals['close'], 
+                       color='green', marker='^', s=100, label='Buy Signal', zorder=5)
+        
+        # 标记卖出信号
+        if len(sell_signals) > 0:
+            ax1.scatter(sell_signals.index, sell_signals['close'],
+                       color='red', marker='v', s=100, label='Sell Signal', zorder=5)
+        
+        ax1.set_title(f'{symbol} - Price and Trading Signals (Demo)')
+        ax1.set_ylabel('Price (USDT)')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        # 权益曲线（如果有）
+        if 'equity_curve' in results:
+            equity_df = results['equity_curve']
+            ax2.plot(equity_df.index, equity_df['equity'], label='Equity Curve', linewidth=2, color='green')
+            ax2.axhline(y=capital, color='red', linestyle='--', alpha=0.5, label='Initial Capital')
+        
+        ax2.set_title('Equity Curve')
+        ax2.set_ylabel('Equity (USDT)')
+        ax2.set_xlabel('Date')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        chart_file = os.path.join(results_dir, f"{symbol}_{timestamp}_chart.png")
+        plt.savefig(chart_file, dpi=150, bbox_inches='tight')
+        plt.close()
+        
+        print(f"  图表文件: {chart_file}")
+        
+    except ImportError:
+        print("  跳过图表生成 (matplotlib不可用)")
     
-    return results
+    print(f"\n{'='*60}")
+    print(f"演示完成！结果保存在: {results_dir}/")
+    print(f"{'='*60}")
+
+def main():
+    """主函数"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='运行1小时级别CTA策略演示')
+    parser.add_argument('--symbol', type=str, default='BTCUSDT',
+                       help='交易对 (默认: BTCUSDT)')
+    parser.add_argument('--days', type=int, default=30,
+                       help='回测天数 (默认: 30)')
+    parser.add_argument('--capital', type=float, default=10000,
+                       help='初始资金 (默认: 10000)')
+    parser.add_argument('--list-demo', action='store_true',
+                       help='显示演示选项')
+    
+    args = parser.parse_args()
+    
+    if args.list_demo:
+        print("演示选项:")
+        print("  1. 快速测试: python run_demo.py --symbol BTCUSDT --days 7")
+        print("  2. 标准测试: python run_demo.py --symbol ETHUSDT --days 30")
+        print("  3. 长期测试: python run_demo.py --symbol BTCUSDT --days 90 --capital 50000")
+        return
+    
+    run_demo_backtest(args.symbol, args.days, args.capital)
 
 if __name__ == "__main__":
-    print("加密货币CTA策略演示系统")
-    print("=" * 70)
-    
-    try:
-        # 演示单个策略
-        demo_strategy_with_aggressive_params()
-        
-        # 演示多策略比较
-        demo_multiple_strategies()
-        
-        print("\n" + "=" * 70)
-        print("演示完成!")
-        print("=" * 70)
-        
-    except Exception as e:
-        print(f"\n错误: {e}")
-        import traceback
-        traceback.print_exc()
+    main()

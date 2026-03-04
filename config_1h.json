@@ -1,0 +1,98 @@
+{
+  "binance_api": {
+    "api_key": "",
+    "api_secret": "",
+    "note": "如果需要获取私有数据或更高频率的数据，请填写API密钥。公开数据不需要API密钥。"
+  },
+  
+  "backtest_settings": {
+    "default_symbol": "BTCUSDT",
+    "default_days": 90,
+    "default_capital": 10000,
+    "default_commission": 0.001,
+    "train_ratio": 0.7,
+    "timeframe": "1h",
+    "note": "1小时级别回测默认设置"
+  },
+  
+  "strategy_parameters": {
+    "fast_period": 12,
+    "slow_period": 48,
+    "rsi_period": 14,
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "atr_period": 14,
+    "volume_threshold": 1.2,
+    "position_size": 0.1,
+    "stop_loss_pct": 0.015,
+    "take_profit_pct": 0.03,
+    "note": "针对1小时级别优化的CTA策略参数"
+  },
+  
+  "risk_management": {
+    "max_position_size": 0.2,
+    "max_daily_trades": 5,
+    "max_concurrent_positions": 3,
+    "volatility_filter": true,
+    "volume_filter": true,
+    "note": "风险控制参数"
+  },
+  
+  "data_settings": {
+    "cache_enabled": true,
+    "cache_expiry_hours": 24,
+    "data_dir": "data_1h",
+    "results_dir": "results_1h",
+    "log_dir": "logs_1h",
+    "note": "数据存储和缓存设置"
+  },
+  
+  "optimization": {
+    "enable_parameter_optimization": true,
+    "optimization_method": "grid_search",
+    "parameter_ranges": {
+      "fast_period": [8, 12, 16],
+      "slow_period": [36, 48, 60],
+      "position_size": [0.08, 0.1, 0.12],
+      "stop_loss_pct": [0.01, 0.015, 0.02],
+      "take_profit_pct": [0.025, 0.03, 0.035]
+    },
+    "note": "参数优化设置"
+  },
+  
+  "visualization": {
+    "generate_charts": true,
+    "chart_format": "png",
+    "chart_dpi": 150,
+    "show_signals": true,
+    "show_equity_curve": true,
+    "show_drawdown": true,
+    "note": "可视化设置"
+  },
+  
+  "common_symbols": [
+    "BTCUSDT",
+    "ETHUSDT", 
+    "BNBUSDT",
+    "SOLUSDT",
+    "ADAUSDT",
+    "XRPUSDT",
+    "DOTUSDT",
+    "DOGEUSDT",
+    "AVAXUSDT",
+    "MATICUSDT",
+    "LINKUSDT",
+    "UNIUSDT",
+    "LTCUSDT",
+    "BCHUSDT",
+    "ATOMUSDT"
+  ],
+  
+  "notes": [
+    "1. 首次运行前请安装依赖: pip install python-binance ccxt pandas numpy matplotlib",
+    "2. 如果没有币安API密钥，系统会使用公开数据或模拟数据",
+    "3. 1小时级别策略适合中短期趋势跟踪",
+    "4. 建议先在小资金上测试，再实盘交易",
+    "5. 历史回测结果不代表未来表现，交易有风险"
+  ]
+}
