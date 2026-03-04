@@ -1,0 +1,23 @@
+{
+  "symbol": "BTC-USD",
+  "period": "1y",
+  "interval": "1d",
+  "initial_capital": 100000,
+  "train_ratio": 0.7,
+  "strategy": {
+    "fast_period": 20,
+    "slow_period": 50,
+    "rsi_period": 14,
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "atr_period": 14,
+    "volume_threshold": 1.2,
+    "position_size": 0.1,
+    "stop_loss_pct": 0.02,
+    "take_profit_pct": 0.04
+  },
+  "backtest": {
+    "commission": 0.001,
+    "slippage": 0.0005
+  }
+}
