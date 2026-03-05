@@ -1,0 +1,212 @@
+{
+  "system": {
+    "name": "统一CTA交易系统",
+    "version": "1.0.0",
+    "description": "支持回测和实盘的统一交易系统"
+  },
+  
+  "modes": {
+    "backtest": {
+      "enabled": true,
+      "default_timeframe": "1h",
+      "default_capital": 10000,
+      "default_commission": 0.001,
+      "data_source": "binance",
+      "cache_enabled": true
+    },
+    "live": {
+      "enabled": false,
+      "warning": "实盘交易涉及真实资金风险，请谨慎使用",
+      "min_capital": 100,
+      "max_position_size": 0.2,
+      "safety_checks": true
+    }
+  },
+  
+  "strategies": {
+    "cta_1h": {
+      "name": "1小时CTA策略",
+      "class": "CTAStrategy",
+      "enabled": true,
+      "description": "1小时级别的趋势跟踪+均值回归策略",
+      "parameters": {
+        "fast_period": 12,
+        "slow_period": 48,
+        "rsi_period": 14,
+        "bb_period": 20,
+        "bb_std": 2.0,
+        "atr_period": 14,
+        "volume_threshold": 1.2,
+        "position_size": 0.1,
+        "stop_loss_pct": 0.015,
+        "take_profit_pct": 0.03
+      },
+      "risk_management": {
+        "max_daily_trades": 5,
+        "max_concurrent_positions": 3,
+        "max_drawdown_limit": 0.15,
+        "volatility_filter": true
+      }
+    },
+    "cta_4h": {
+      "name": "4小时CTA策略",
+      "class": "CTAStrategy",
+      "enabled": true,
+      "description": "4小时级别的趋势跟踪策略",
+      "parameters": {
+        "fast_period": 24,
+        "slow_period": 96,
+        "rsi_period": 14,
+        "bb_period": 20,
+        "bb_std": 2.0,
+        "atr_period": 14,
+        "volume_threshold": 1.2,
+        "position_size": 0.15,
+        "stop_loss_pct": 0.02,
+        "take_profit_pct": 0.04
+      }
+    }
+  },
+  
+  "data_sources": {
+    "binance": {
+      "enabled": true,
+      "api_key": "",
+      "api_secret": "",
+      "use_public_data": true,
+      "cache_duration_hours": 24,
+      "rate_limit_delay_ms": 100
+    },
+    "simulation": {
+      "enabled": true,
+      "use_for_backtest": true,
+      "realism_level": "high",
+      "volatility": 0.02
+    }
+  },
+  
+  "exchanges": {
+    "binance": {
+      "enabled": false,
+      "api_key_required": true,
+      "testnet_available": true,
+      "supported_pairs": ["BTCUSDT", "ETHUSDT", "BNBUSDT"],
+      "rate_limits": {
+        "orders_per_second": 10,
+        "weight_limit": 1200
+      }
+    }
+  },
+  
+  "risk_controls": {
+    "global": {
+      "max_total_exposure": 0.5,
+      "max_loss_per_day": 0.05,
+      "max_loss_per_trade": 0.02,
+      "circuit_breakers": true
+    },
+    "per_strategy": {
+      "max_capital_allocation": 0.3,
+      "max_drawdown_hard_stop": 0.2,
+      "performance_monitoring": true
+    }
+  },
+  
+  "monitoring": {
+    "logging": {
+      "level": "INFO",
+      "file_enabled": true,
+      "file_path": "logs/trading.log",
+      "console_enabled": true
+    },
+    "alerts": {
+      "email_enabled": false,
+      "telegram_enabled": false,
+      "webhook_enabled": false,
+      "critical_events": ["max_drawdown", "connection_lost", "unexpected_error"]
+    },
+    "dashboard": {
+      "enabled": true,
+      "port": 8080,
+      "update_interval_seconds": 5
+    }
+  },
+  
+  "performance": {
+    "metrics": {
+      "calculate_sharpe": true,
+      "calculate_sortino": true,
+      "calculate_max_drawdown": true,
+      "calculate_calmar": true,
+      "calculate_win_rate": true
+    },
+    "reporting": {
+      "generate_charts": true,
+      "save_trade_logs": true,
+      "save_equity_curve": true,
+      "export_format": ["json", "csv"]
+    }
+  },
+  
+  "backtest": {
+    "defaults": {
+      "start_date": "2025-01-01",
+      "end_date": "2025-12-31",
+      "initial_capital": 10000,
+      "commission": 0.001,
+      "slippage": 0.0005
+    },
+    "optimization": {
+      "enabled": true,
+      "method": "grid_search",
+      "parameter_ranges": {
+        "fast_period": [8, 12, 16],
+        "slow_period": [36, 48, 60],
+        "position_size": [0.08, 0.1, 0.12],
+        "stop_loss_pct": [0.01, 0.015, 0.02],
+        "take_profit_pct": [0.025, 0.03, 0.035]
+      }
+    }
+  },
+  
+  "live_trading": {
+    "safety_features": {
+      "paper_trading_first": true,
+      "small_position_testing": true,
+      "manual_confirmation": false,
+      "emergency_stop": true
+    },
+    "execution": {
+      "order_type": "limit",
+      "use_stop_loss": true,
+      "use_take_profit": true,
+      "partial_fills": true
+    },
+    "monitoring": {
+      "health_check_interval": 30,
+      "connection_timeout": 10,
+      "auto_restart": false
+    }
+  },
+  
+  "common_symbols": [
+    "BTCUSDT",
+    "ETHUSDT",
+    "BNBUSDT",
+    "SOLUSDT",
+    "ADAUSDT",
+    "XRPUSDT",
+    "DOTUSDT",
+    "DOGEUSDT",
+    "AVAXUSDT",
+    "MATICUSDT"
+  ],
+  
+  "notes": [
+    "1. 实盘交易前务必充分回测和模拟测试",
+    "2. 建议先使用小资金进行实盘验证",
+    "3. 定期备份配置和交易记录",
+    "4. 监控系统性能和网络连接",
+    "5. 遵守交易所的API使用规则"
+  ]
+}
